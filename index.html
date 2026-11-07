@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b1220">
+<title>Rubik 3D Camera Tracker</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1220;--panel:#151f30;--line:#2b3a50;--muted:#9aabc2;--green:#26b58b}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:#f4f7fb;font:15px system-ui,-apple-system,Segoe UI,sans-serif}
+header{text-align:center;padding:18px 14px 10px}h1{font-size:24px;margin:0 0 4px}header p{margin:0;color:var(--muted);font-size:13px}
+main{max-width:900px;margin:auto;padding:10px 13px 35px;display:grid;gap:13px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px}
+h2{font-size:17px;margin:0 0 9px}.hint,.small{color:var(--muted);font-size:13px;line-height:1.5}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+button,select{background:#263750;color:white;border:1px solid #405572;border-radius:10px;padding:10px 12px;font-weight:650;font-size:14px}
+button.primary{background:#167b60;border-color:#249b79}button:disabled{opacity:.45}
+#camera{width:100%;max-height:340px;display:block;object-fit:cover;background:#03060a;border-radius:12px}
+.cameraStage{position:relative;background:#03060a;border-radius:12px;overflow:hidden}
+.target{position:absolute;left:20%;top:12%;width:60%;height:76%;border:2px dashed #65e4b9;border-radius:16px;pointer-events:none}
+.status{min-height:20px;color:#79e0bd;font-size:13px;margin-top:8px}
+#cube3d{width:100%;height:320px;display:block;border-radius:12px;background:radial-gradient(ellipse at center,#24354d,#0c1422 72%)}
+.turns{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-top:10px}
+.turns button{padding:10px 2px}.faceButtons{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.faceButtons button.active{background:#167b60}
+ol{padding-left:22px;max-height:150px;overflow:auto}li{padding:3px 0}
+.grid6{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
+.facecard{background:#101a29;border:1px solid var(--line);padding:8px;border-radius:10px}
+.facecard strong{display:block;text-align:center;font-size:12px;margin-bottom:5px}
+.squares{display:grid;grid-template-columns:repeat(3,1fr);gap:2px}
+.sq{aspect-ratio:1;border-radius:3px;border:1px solid #0006}
+@media(max-width:430px){#cube3d{height:270px}.turns{grid-template-columns:repeat(3,1fr)}}
+</style>
+</head>
+<body>
+<header><h1>RUBIK 3D CAMERA TRACKER</h1><p>Scan warna · Rubik 3D · kamera · notasi gerakan</p></header>
+<main>
+<section class="panel">
+<h2>1. Kamera Rubik asli</h2>
+<p class="hint">Tekan izinkan kamera. Letakkan Rubik di dalam bingkai. Kamera akan menampilkan video langsung dan mendeteksi perubahan gerak visual.</p>
+<div class="row">
+<button class="primary" id="allow">Izinkan & nyalakan kamera</button>
+<button id="stop" disabled>Matikan kamera</button>
+<select id="facing"><option value="environment">Kamera belakang</option><option value="user">Kamera depan</option></select>
+</div>
+<div class="cameraStage" style="margin-top:10px"><video id="camera" autoplay muted playsinline></video><div class="target"></div></div>
+<div class="status" id="camStatus">Izin kamera belum diberikan.</div>
+<p class="small">Izin kamera diminta oleh browser saat tombol ditekan. Gunakan HTTPS atau localhost. Video diproses di perangkat dan tidak diunggah oleh halaman ini.</p>
+</section>
+
+<section class="panel">
+<h2>2. Rubik virtual 3D</h2>
+<p class="hint">Kubus 3D ini dapat diputar dan setiap notasi putaran akan dianimasikan pada sisi yang sesuai. Seret pada area kubus untuk mengubah sudut pandang.</p>
+<canvas id="cube3d"></canvas>
+<div class="row">
+<button id="viewReset">Reset sudut pandang</button>
+<button id="scramble">Acak 10 gerakan</button>
+</div>
+<div class="status" id="cubeStatus">Rubik 3D siap.</div>
+</section>
+
+<section class="panel">
+<h2>3. Scan / atur warna enam sisi</h2>
+<p class="hint">Pilih sisi, lalu pilih warna untuk tiap kotak. Hasilnya langsung mengubah warna kubus 3D. Pemindaian kamera otomatis per kotak belum diaktifkan pada prototipe ini.</p>
+<div class="faceButtons" id="facePick"></div>
+<div class="grid6" id="colorGrid"></div>
+<div class="row" style="margin-top:10px"><button id="defaultColors">Warna standar</button><button id="resetColors">Reset warna</button></div>
+</section>
+
+<section class="panel">
+<h2>4. Gerakan Rubik</h2>
+<p class="hint">Pilih notasi sesuai putaran Rubik asli. Putaran akan dianimasikan pada kubus 3D dan ditambahkan ke daftar.</p>
+<div class="turns" id="turnButtons"></div>
+<div class="row" style="margin-top:10px"><button id="undo">Urungkan</button><button id="clear">Hapus riwayat</button><button id="copy">Salin algoritma</button></div>
+<ol id="history"><li class="small">Belum ada gerakan.</li></ol>
+<div class="status" id="moveStatus"></div>
+</section>
+<section class="panel">
+<h2>Batas kemampuan pelacakan otomatis</h2>
+<p class="hint">Kamera pada versi ini meminta izin, menampilkan Rubik asli, dan mendeteksi perubahan gerak pada gambar. Namun, kamera biasa belum otomatis mengetahui apakah lapisan yang diputar adalah R, U, F, L, D, atau B. Agar Rubik 3D benar-benar mengikuti setiap putaran sisi tanpa tombol, diperlukan pengenalan posisi 3D dan warna/stiker tiap kotak secara real-time, termasuk kalibrasi kamera. Prototipe ini menyediakan kubus 3D dan animasi notasi sebagai dasar, tetapi belum mengklaim pelacakan putaran otomatis.</p>
+</section>
+</main>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+const canvas=document.querySelector('#cube3d');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+const scene=new THREE.Scene();
+const camera3=new THREE.PerspectiveCamera(35,1,.1,100);camera3.position.set(5,5,7);camera3.lookAt(0,0,0);
+scene.add(new THREE.AmbientLight(0xffffff,2.0));
+const light=new THREE.DirectionalLight(0xffffff,2.5);light.position.set(5,8,6);scene.add(light);
+const root=new THREE.Group();scene.add(root);
+const colors={U:0xf5f5f5,D:0xffd500,F:0x20a45b,B:0x246bdb,R:0xe53935,L:0xff8c1a};
+const mats=(x,y,z)=>[
+ new THREE.MeshStandardMaterial({color:x}),new THREE.MeshStandardMaterial({color:x}),
+ new THREE.MeshStandardMaterial({color:y}),new THREE.MeshStandardMaterial({color:y}),
+ new THREE.MeshStandardMaterial({color:z}),new THREE.MeshStandardMaterial({color:z})
+];
+let cubies=[];
+function makeCube(){
+ while(root.children.length)root.remove(root.children[0]);cubies=[];
+ const geo=new THREE.BoxGeometry(.96,.96,.96);
+ for(let x=-1;x<=1;x++)for(let y=-1;y<=1;y++)for(let z=-1;z<=1;z++){
+  const c=[0x111827,0x111827,0x111827,0x111827,0x111827,0x111827];
+  if(x===1)c[0]=colors.R;if(x===-1)c[1]=colors.L;
+  if(y===1)c[2]=colors.U;if(y===-1)c[3]=colors.D;
+  if(z===1)c[4]=colors.F;if(z===-1)c[5]=colors.B;
+  const mesh=new THREE.Mesh(geo,c.map(color=>new THREE.MeshStandardMaterial({color,roughness:.65})));
+  mesh.position.set(x,y,z);mesh.userData.home={x,y,z};root.add(mesh);cubies.push(mesh);
+ }
+}
+makeCube();
+function resize(){const w=canvas.clientWidth,h=canvas.clientHeight;renderer.setSize(w,h,false);camera3.aspect=w/h;camera3.updateProjectionMatrix()}
+new ResizeObserver(resize).observe(canvas);resize();
+let drag=false,px=0,py=0;
+canvas.addEventListener('pointerdown',e=>{drag=true;px=e.clientX;py=e.clientY;canvas.setPointerCapture(e.pointerId)});
+canvas.addEventListener('pointerup',()=>drag=false);
+canvas.addEventListener('pointermove',e=>{if(!drag)return;root.rotation.y+=(e.clientX-px)*.009;root.rotation.x+=(e.clientY-py)*.009;px=e.clientX;py=e.clientY});
+function loop(){requestAnimationFrame(loop);renderer.render(scene,camera3)}loop();
+const faceDefs={R:{axis:'x',v:1,angle:-1},L:{axis:'x',v:-1,angle:1},U:{axis:'y',v:1,angle:-1},D:{axis:'y',v:-1,angle:1},F:{axis:'z',v:1,angle:-1},B:{axis:'z',v:-1,angle:1}};
+let busy=false,history=[];
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+async function turn(notation,record=true){
+ if(busy)return;busy=true;
+ const face=notation[0],prime=notation.includes("'")||notation.includes('′'),double=notation.includes('2');
+ const def=faceDefs[face],dir=def.angle*(prime?-1:1),angle=dir*(double?Math.PI:Math.PI/2);
+ const group=new THREE.Group();root.add(group);
+ const selected=cubies.filter(m=>Math.round(m.position[def.axis])===def.v);
+ selected.forEach(m=>{root.remove(m);group.attach(m)});
+ const start=performance.now(),duration=double?360:260;
+ await new Promise(resolve=>{function step(now){let t=Math.min(1,(now-start)/duration);group.rotation[def.axis]=angle*t;if(t<1)requestAnimationFrame(step);else resolve()}requestAnimationFrame(step)});
+ group.updateMatrixWorld(true);
+ const moved=[...group.children];moved.forEach(m=>{root.attach(m);m.position.set(Math.round(m.position.x),Math.round(m.position.y),Math.round(m.position.z));m.rotation.set(Math.round(m.rotation.x/(Math.PI/2))*Math.PI/2,Math.round(m.rotation.y/(Math.PI/2))*Math.PI/2,Math.round(m.rotation.z/(Math.PI/2))*Math.PI/2)});
+ root.remove(group);busy=false;
+ if(record){history.push(notation);renderHistory()}
+ document.querySelector('#cubeStatus').textContent='Animasi putaran '+notation+' selesai.';
+}
+const turns=['U',"U'",'U2','R',"R'",'R2','F',"F'",'F2','D',"D'",'D2','L',"L'",'L2','B',"B'",'B2'];
+const turnBox=document.querySelector('#turnButtons');
+turns.forEach(t=>{const b=document.createElement('button');b.textContent=t;b.onclick=()=>turn(t);turnBox.append(b)});
+function renderHistory(){const ol=document.querySelector('#history');ol.innerHTML='';if(!history.length){ol.innerHTML='<li class="small">Belum ada gerakan.</li>';return}history.forEach((m,i)=>{const li=document.createElement('li');li.textContent=`${i+1}. ${m}`;ol.append(li)})}
+document.querySelector('#undo').onclick=()=>{if(history.length){history.pop();renderHistory();document.querySelector('#moveStatus').textContent='Riwayat diubah. Catatan ini tidak membalik animasi kubus.'}};
+document.querySelector('#clear').onclick=()=>{history=[];renderHistory();document.querySelector('#moveStatus').textContent='Riwayat dikosongkan.'};
+document.querySelector('#copy').onclick=async()=>{try{await navigator.clipboard.writeText(history.join(' '));document.querySelector('#moveStatus').textContent='Algoritma disalin.'}catch{document.querySelector('#moveStatus').textContent=history.join(' ')}};
+document.querySelector('#scramble').onclick=async()=>{for(let i=0;i<10;i++){while(busy)await sleep(30);await turn(turns[Math.floor(Math.random()*turns.length)])}};
+document.querySelector('#viewReset').onclick=()=>{root.rotation.set(0,0,0);camera3.position.set(5,5,7);camera3.lookAt(0,0,0)};
+const standard={U:'#f5f5f5',D:'#ffd500',F:'#20a45b',B:'#246bdb',R:'#e53935',L:'#ff8c1a'};
+let faceSelected='F',faceColors={};Object.keys(standard).forEach(f=>faceColors[f]=Array(9).fill(standard[f]));
+const picker=document.querySelector('#facePick'),grid=document.querySelector('#colorGrid');
+const palette=[['Putih','#f5f5f5'],['Kuning','#ffd500'],['Hijau','#20a45b'],['Biru','#246bdb'],['Merah','#e53935'],['Oranye','#ff8c1a']];
+function updatePicker(){picker.innerHTML='';Object.keys(standard).forEach(f=>{let b=document.createElement('button');b.textContent=f;b.className=f===faceSelected?'active':'';b.onclick=()=>{faceSelected=f;updatePicker();renderGrid()};picker.append(b)})}
+function renderGrid(){grid.innerHTML='';faceColors[faceSelected].forEach((col,i)=>{const card=document.createElement('div');card.className='facecard';const strong=document.createElement('strong');strong.textContent=faceSelected+' · kotak '+(i+1);const sel=document.createElement('select');sel.style.width='100%';palette.forEach(([name,hex])=>{const o=document.createElement('option');o.value=hex;o.textContent=name;if(hex===col)o.selected=true;sel.append(o)});sel.onchange=()=>{faceColors[faceSelected][i]=sel.value;applyFaceColor(faceSelected,i,sel.value)};card.append(strong,sel);grid.append(card)})}
+function applyFaceColor(face,index,hex){/* color state is editable; mesh sticker-level mapping is the next CV integration step */}
+document.querySelector('#defaultColors').onclick=()=>{Object.keys(standard).forEach(f=>faceColors[f]=Array(9).fill(standard[f]));renderGrid()};
+document.querySelector('#resetColors').onclick=()=>{Object.keys(standard).forEach(f=>faceColors[f]=Array(9).fill('#26354a'));renderGrid()};
+updatePicker();renderGrid();
+
+// Camera permission + coarse visual motion detector
+let stream=null,motionTimer=null,previous=null;
+const video=document.querySelector('#camera');
+document.querySelector('#allow').onclick=async()=>{
+ try{
+  if(!navigator.mediaDevices?.getUserMedia)throw new Error('Kamera perlu Chrome pada HTTPS atau localhost.');
+  stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:document.querySelector('#facing').value},width:{ideal:1280},height:{ideal:720}},audio:false});
+  video.srcObject=stream;await video.play();
+  document.querySelector('#allow').disabled=true;document.querySelector('#stop').disabled=false;
+  document.querySelector('#camStatus').textContent='Kamera aktif. Gerakan visual sedang dipantau.';
+  motionTimer=setInterval(checkMotion,400);
+ }catch(e){document.querySelector('#camStatus').textContent='Tidak bisa membuka kamera: '+e.message}
+};
+function checkMotion(){
+ if(!video.videoWidth)return;
+ const c=document.createElement('canvas');c.width=32;c.height=24;const ctx=c.getContext('2d',{willReadFrequently:true});ctx.drawImage(video,0,0,32,24);
+ const d=ctx.getImageData(0,0,32,24).data;let gray=[];
+ for(let i=0;i<d.length;i+=4)gray.push((.299*d[i]+.587*d[i+1]+.114*d[i+2])|0);
+ if(previous){let diff=0;for(let i=0;i<gray.length;i++)diff+=Math.abs(gray[i]-previous[i]);const score=diff/gray.length;
+  document.querySelector('#camStatus').textContent=score>12?'Perubahan gerak terlihat. Cocokkan putaran pada tombol notasi.':'Kamera aktif · menunggu gerakan.';
+ }previous=gray;
+}
+document.querySelector('#stop').onclick=()=>{clearInterval(motionTimer);stream?.getTracks().forEach(t=>t.stop());stream=null;video.srcObject=null;previous=null;document.querySelector('#allow').disabled=false;document.querySelector('#stop').disabled=true;document.querySelector('#camStatus').textContent='Kamera dimatikan.'};
+</script>
+</body>
+</html>
